@@ -121,6 +121,102 @@ plt.show()
 
 print("1.b) Se generó el gráfico 1.b.pdf mostrando el FWHM vs t_max en escala log-log.")
 
+###1.C
+
+# Cargar los datos usando el método de la tarea anterior
+with open('OGLE-LMC-CEP-0001.dat', 'r') as file:
+    lines = file.readlines()
+
+# Separar caracteres y ajustar formato
+Listas = []
+for line in lines:
+    nueva_cadena = line.replace("\n", "")
+    pos = [i for i, char in enumerate(line) if char == '.']
+
+    if len(pos) > 1 and line[pos[1]-2] != " ":
+        if line[pos[1]-2] == "-":
+            nueva_cadena = nueva_cadena[:pos[1]-2] + " " + nueva_cadena[pos[1]-2:]
+        else:
+            nueva_cadena = nueva_cadena[:pos[1]-1] + " " + nueva_cadena[pos[1]-1:]
+
+    pos = [i for i, char in enumerate(nueva_cadena) if char == '.']
+    if len(pos) > 2 and nueva_cadena[pos[2]-2] != " ":
+        if nueva_cadena[pos[2]-2] == "-":
+            nueva_cadena = nueva_cadena[:pos[2]-2] + " " + nueva_cadena[pos[2]-2:]
+        else:
+            nueva_cadena = nueva_cadena[:pos[2]-1] + " " + nueva_cadena[pos[2]-1:]
+
+    Listas.append(nueva_cadena.split(" "))
+
+Matriz = np.array(Listas, dtype=float)
+time = Matriz[:, 0]  # Columna de tiempo (días)
+intensity = Matriz[:, 1]  # Columna de intensidad
+y_uncertainty = Matriz[:, 2]  # Columna de incertidumbre
+
+# 1. Frecuencia de Nyquist
+# Calcular las diferencias temporales
+delta_t = np.diff(time)  # Diferencias entre tiempos consecutivos
+
+if len(delta_t) == 0:
+    raise ValueError("No se encontraron diferencias temporales. Verifica los datos cargados.")
+
+# Histograma de diferencias temporales para encontrar el intervalo más común
+plt.figure(figsize=(8, 6))
+plt.hist(delta_t, bins=50, alpha=0.7, color='blue', label="Intervalos de tiempo")
+plt.xlabel("Intervalo de tiempo (días)")
+plt.ylabel("Frecuencia")
+plt.title("Histograma de diferencias temporales")
+plt.grid(True)
+plt.savefig("1.c_histogram.pdf")
+
+# Usar el intervalo mínimo relevante para Nyquist
+min_delta_t = np.min(delta_t)
+nyquist_frequency = 1 / (2 * min_delta_t)  # Fórmula de Nyquist
+print(f"1.c) f Nyquist: {nyquist_frequency:.4f} 1/día")
+
+# 2. Transformada de Fourier para encontrar f_true
+# Quitar el promedio de la señal
+adjusted_intensity = intensity - np.mean(intensity)
+
+# Definir el rango de frecuencias
+frequencies = np.linspace(0, 8, 5000)  # 0/día a 8/día con alta densidad
+fourier_transform = np.array([np.sum(adjusted_intensity * np.exp(-2j * np.pi * f * time)) for f in frequencies])
+amplitude_spectrum = np.abs(fourier_transform)
+
+# Verificar si hay picos disponibles
+peaks, _ = find_peaks(amplitude_spectrum, height=np.mean(amplitude_spectrum) + 0.1 * np.std(amplitude_spectrum))
+if len(peaks) == 0:
+    raise ValueError("No se encontraron picos en el espectrograma. Verifica los datos y el rango de frecuencias.")
+
+# Encontrar el pico más prominente
+prominent_peak_idx = peaks[np.argmax(amplitude_spectrum[peaks])]  # Índice del pico más prominente
+f_true = frequencies[prominent_peak_idx]  # Frecuencia de oscilación verdadera
+print(f"1.c) f true: {f_true:.4f} 1/día")
+
+# 3. Validación con la fase
+phi = np.mod(f_true * time, 1)  # Calcular la fase
+plt.figure(figsize=(8, 6))
+plt.scatter(phi, intensity, alpha=0.7, s=10, label="Datos ajustados")
+plt.xlabel("Fase (φ)")
+plt.ylabel("Intensidad")
+plt.title("Intensidad vs Fase")
+plt.grid(True)
+plt.legend()
+plt.savefig("1.c.pdf")
+
+# Graficar el espectrograma
+plt.figure(figsize=(8, 6))
+plt.plot(frequencies, amplitude_spectrum, color='blue', label="Espectrograma")
+plt.axvline(f_true, color='red', linestyle='--', label=f"f_true = {f_true:.4f} 1/día")
+plt.xlabel("Frecuencia (1/día)")
+plt.ylabel("Amplitud")
+plt.title("Espectrograma de la señal")
+plt.grid(True)
+plt.legend()
+plt.savefig("1.c_spectrogram.pdf")
+
+# Conclusiones impresas
+print("Los resultados fueron guardados en 1.c.pdf y 1.c_spectrogram.pdf.")
 ##################################
 #########  PARTE 2. Transformada rápida
 ##################################
