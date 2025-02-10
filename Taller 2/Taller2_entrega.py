@@ -62,13 +62,13 @@ print("1.a) Aumento de ruido magnifica todas las frecuencias  y genera desorden
 
 #1.b 
 # Parámetros iniciales
-t_max = 300  # Rango de tiempo ajustado
-intervalo_tiempo = (10, 300)  # Rango de tiempo en segundos
-amplitudes = np.array([1.0])  # Amplitud única
+t_max_values = np.linspace(10, 300, 15)  # Rango de tiempo de 10s a 300s
+dt = 0.001
+amplitudes = np.array([1.0])  # Una sola amplitud
 frecuencia_conocida = 50  # Frecuencia conocida en Hz
-dt = 0.001  # Resolución en el tiempo
-total_frequencies = 500  # Suficientes puntos en el eje de frecuencias
+total_frequencies = 500  # Resolución en el eje de frecuencias
 
+@jit(nopython=True)
 def calculate_fwhm(frequencies: NDArray[np.float64], amplitudes: NDArray[np.float64]) -> float:
     """Calcular el ancho completo a media altura (FWHM)."""
     peak_index = np.argmax(amplitudes)  # Índice del pico más alto
@@ -98,34 +98,28 @@ def datos_prueba(t_max: float, dt: float, amplitudes: NDArray[np.float64], frecu
         ys += A * np.sin(2 * np.pi * f * ts)
     return ts, ys
 
-# Generar datos para un rango de tiempo ajustado
-ts, ys = datos_prueba(t_max, dt, amplitudes, np.array([frecuencia_conocida]))
-intervalo_indices = (int(intervalo_tiempo[0] / dt), int(intervalo_tiempo[1] / dt))
-ts_intervalo = ts[intervalo_indices[0]:intervalo_indices[1]]
-ys_intervalo = ys[intervalo_indices[0]:intervalo_indices[1]]
+# Almacenar valores de FWHM para diferentes t_max
+fwhm_values = []
+for t_max in t_max_values:
+    ts, ys = datos_prueba(t_max, dt, amplitudes, np.array([frecuencia_conocida]))
+    f = np.linspace(0, 100, total_frequencies)  # Rango de frecuencias de interés
+    fourier_result = Fourier(ts, ys, f)  # Calcular transformada de Fourier
 
-# Calcular transformada de Fourier
-frecuencias = np.linspace(0, 100, total_frequencies)  # Rango de frecuencias
-fourier_result = Fourier(ts_intervalo, ys_intervalo, frecuencias)
-amplitudes_fourier = np.abs(fourier_result)  # Amplitud absoluta de la transformada
-fwhm = calculate_fwhm(frecuencias, amplitudes_fourier)  # Calcular el FWHM
+    amplitudes_fourier = np.abs(fourier_result)  # Amplitud absoluta de la transformada
+    fwhm = calculate_fwhm(f, amplitudes_fourier)  # Calcular el FWHM
+    fwhm_values.append(fwhm)
 
-# Imprimir el valor de FWHM
-print(f"Intervalo de tiempo: {intervalo_tiempo[0]}s - {intervalo_tiempo[1]}s, FWHM: {fwhm:.4f} Hz")
-
-# Graficar el FWHM como barra
+# Graficar FWHM vs t_max (log-log)
 plt.figure(figsize=(8, 6))
-plt.bar([frecuencia_conocida], [fwhm], width=5, alpha=0.7, color="green", label="FWHM")
-plt.yscale("log")
-plt.xscale("log")
-plt.title("FWHM para la frecuencia conocida")
-plt.xlabel("Frecuencia (Hz)")
-plt.ylabel("FWHM (Hz)")
-plt.grid(which="both", linestyle="--")
+plt.loglog(t_max_values, fwhm_values, marker='o', label='FWHM vs t_max')
+plt.title("FWHM del pico vs t_max en escala log-log")
+plt.xlabel("t_max (s)")
+plt.ylabel("FWHM")
 plt.legend()
-plt.savefig("1.b_single_bar.pdf")  # Guardar la gráfica
+plt.savefig("1.b.pdf")  # Guardar la gráfica
+plt.show()
 
-print("1.b) Se generó la gráfica 1.b_single_bar.pdf mostrando el FWHM.")
+print("1.b) Se generó el gráfico 1.b.pdf mostrando el FWHM vs t_max en escala log-log.")
 
 ##################################
 #########  PARTE 3
