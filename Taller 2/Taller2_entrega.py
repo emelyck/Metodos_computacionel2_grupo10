@@ -303,13 +303,40 @@ datos_filtrados = datos[
 
 datos_filtrados.loc[:, "Date"] = pd.to_datetime(datos_filtrados[["Year", "Month", "Day"]])
 
-fechas = datos_filtrados["Date"].to_numpy() 
-manchas = datos_filtrados["SSN"].to_numpy()  
+fechas = datos_filtrados["Date"].to_numpy()
+manchas = datos_filtrados["SSN"].to_numpy()
 
 # Transformada
-transformada = np.fft.fft(manchas)
-frecuencias = np.fft.fftfreq(len(fechas))
+transformada_sol = np.fft.rfft(manchas)
+f_sol = np.fft.rfftfreq(len(fechas), d=1)
 
+# Calcular la magnitud
+mag_sol = np.abs(transformada_sol)
+
+# Encontrar la frecuencia máxima
+indice_max = np.argmax(mag_sol)
+frecuencia_max_sol = f_sol[indice_max]
+
+# Verificar la frecuencia máxima
+print("Frecuencia máxima:", f"{frecuencia_max_sol:e}")
+
+# Calcular el período en años
+if frecuencia_max_sol != 0:
+    P_solar = 1 / frecuencia_max_sol  # El período en días
+    P_solar_años = P_solar / 365.25  # Convertir a años
+    print(f'2.b.a) P_solar = {P_solar_años:.2f} años')
+else:
+    print("No se encontró una frecuencia significativa.")
+
+# Visualizar la gráfica de la transformada en ejes log-log
+plt.figure(figsize=(15, 10))
+plt.loglog(f_sol[1:len(f_sol)//2], mag_sol[1:len(mag_sol)//2], marker='o', color='orange')
+plt.title('Transformada de Fourier de las Manchas Solares', fontsize=18)
+plt.xlabel('Frecuencia (1/días)', fontsize=16)
+plt.ylabel('Magnitud', fontsize=16)
+plt.tick_params(axis='both', labelsize=13)
+plt.grid(True)
+plt.show()
 
 
 ##################################
