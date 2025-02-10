@@ -122,6 +122,101 @@ plt.show()
 print("1.b) Se generó el gráfico 1.b.pdf mostrando el FWHM vs t_max en escala log-log.")
 
 ##################################
+#########  PARTE 2. Transformada rápida
+##################################
+#2.a. Comparativa
+H_field = pd.read_csv('H_field.csv')
+t = H_field['t'].values
+H = H_field['H'].values
+
+H_fft = np.fft.rfft(H)
+
+Delta_t = np.mean(np.diff(t))  # Promedio de las diferencias de tiempo
+n = len(H)
+f = np.fft.rfftfreq(n, Delta_t)
+
+mag = np.abs(H_fft)
+
+pico_index = np.argmax(mag)
+f_fast = mag[pico_index]
+
+
+def Fourier(t: NDArray[float], y: NDArray[float], f: NDArray[float]) -> NDArray[complex]:
+    r = np.zeros((len(f), len(t)), dtype=complex)
+    for j in range(len(f)):
+        for i in range(len(t)):
+            r[j, i] = y[i] * np.exp(-2j * np.pi * t[i] * f[j])
+    return np.sum(r, axis=1)
+
+f_gen = np.linspace(0, 300, 50)  # Ajusta el rango según sea necesario
+
+Fourier_transformada_gen = Fourier(t, H, f_gen)
+
+mag_gen = np.abs(Fourier_transformada_gen)
+frecuencia_maxima_gen = f_gen[np.argmax(mag_gen)]
+
+print(f"2.a) {f_fast = :.5f}; {f_general = }")
+
+# Crear un subplot para comparar las gráficas de las transformadas
+fig, ax = plt.subplots(2, 1, figsize=(15, 12), constrained_layout=True)
+
+# Gráfica 1: FFT
+ax[0].plot(f, mag, "-", color='blue')
+ax[0].set_title('FFT', fontsize=18)
+ax[0].set_xlabel('Frecuencia (Hz)', fontsize=16)
+ax[0].set_ylabel('Magnitud', fontsize=16)
+ax[0].set_xlim(0, max(f))
+ax[0].tick_params(axis='both', labelsize=13)
+ax[0].grid()
+
+# Gráfica 2: Método General
+ax[1].bar(f_gen, mag_gen, width=5, color='red')
+ax[1].set_title("Frecuencia (Hz) vs Magnitud", fontsize=18)
+ax[1].set_xlabel("Frecuencia (Hz)", fontsize=16)
+ax[1].set_ylabel("Magnitud", fontsize=16)
+ax[1].tick_params(axis='both', labelsize=13)
+ax[1].grid(True)
+
+plt.show()
+
+phi_fast = np.mod(f_fast * t, 1)
+phi_general = np.mod(f_general * t, 1)
+
+plt.figure(figsize=(15, 6))
+plt.scatter(phi_fast, H, label='H vs. phi_fast', color='blue')
+plt.scatter(phi_general, H, label='H vs. phi_general', color='red')
+plt.title('H como función de las fases', fontsize=18)
+plt.xlabel('Fase (phi)', fontsize=16)
+plt.ylabel('H', fontsize=16)
+plt.ylim(min(phi_fast)-1.5, max(phi_general)+0.2)
+plt.legend()
+plt.tick_params(axis='both', labelsize=13)
+plt.grid(True)
+
+plt.savefig('2.a.pdf')
+plt.show()
+
+#2.b Manchas solares
+datos = pd.read_csv("Taller 2\\manchas.txt", sep=r'\s+', header=1, names=["Year", "Month", "Day", "SSN"], engine="python")
+datos = datos.dropna()
+
+datos_filtrados = datos[
+    (datos["Year"] < 2012) |  
+    ((datos["Year"] == 2012) & (datos["Month"] == 1) & (datos["Day"] == 1))  
+].copy()  
+
+datos_filtrados.loc[:, "Date"] = pd.to_datetime(datos_filtrados[["Year", "Month", "Day"]])
+
+fechas = datos_filtrados["Date"].to_numpy() 
+manchas = datos_filtrados["SSN"].to_numpy()  
+
+# Transformada
+transformada = np.fft.fft(manchas)
+frecuencias = np.fft.fftfreq(len(fechas))
+
+
+
+##################################
 #########  PARTE 3
 ##################################
 datos = pd.read_csv("Taller 2\\manchas.txt", sep=r'\s+', header=1, names=["Year", "Month", "Day", "SSN"], engine="python")
