@@ -10,6 +10,7 @@ from datetime import datetime
 from PIL import Image
 from matplotlib.path import Path
 from numba import jit
+
 ##################################
 #########  PARTE 1
 ##################################
@@ -337,6 +338,32 @@ plt.ylabel('Magnitud', fontsize=16)
 plt.tick_params(axis='both', labelsize=13)
 plt.grid(True)
 plt.show()
+
+# Ejecutando el código, se observa un pico en la región entre 10^-4 y 10^-3 Hz
+# Seleccionando los datos en esa región de las frecuencias
+
+mask = (f_sol >= 1e-4) & (f_sol <= 1e-3)
+
+mag_filtrada = mag_sol[mask]
+f_sol_filtrada = f_sol[mask]
+
+indice_max_check = np.argmax(mag_filtrada)
+
+frecuencia_max_sol_check = f_sol_filtrada[indice_max_check]
+mag_max_sol_check = mag_filtrada[indice_max_check]
+
+print("Frecuencia máxima aplicando el recorte (Hz):", f"{frecuencia_max_sol_check:e}")
+
+if frecuencia_max_sol_check != 0:
+    P_solar = 1 / frecuencia_max_sol_check  # El período en días
+    P_solar_años = P_solar / 365.25  # Convertir a años
+    print(f'2.b.a) P_solar = {P_solar_años} años')
+else:
+    print("No se encontró una frecuencia significativa.")
+
+
+# 2.b.b
+
 
 
 ##################################
