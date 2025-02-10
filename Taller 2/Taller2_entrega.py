@@ -2,12 +2,62 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import math
+from numpy.typing import NDArray
 from scipy.signal import find_peaks, peak_widths
 from scipy.optimize import curve_fit
 from scipy.interpolate import interp1d
 from datetime import datetime
 from PIL import Image
 from matplotlib.path import Path
+##################################
+#########  PARTE 1
+##################################
+def datos_prueba(t_max: float, dt: float, amplitudes: NDArray[float], frecuencias: NDArray[float], ruido: float = 0.0) -> tuple[NDArray[float], NDArray[float]]:
+    ts = np.arange(0., t_max, dt)
+    ys = np.zeros_like(ts, dtype=float)
+    for A, f in zip(amplitudes, frecuencias):
+        ys += A * np.sin(2 * np.pi * f * ts)
+    ys += np.random.normal(loc=0, size=len(ys), scale=ruido) if ruido else 0
+    return ts, ys
+    
+# Parámetros iniciales
+t_max = 1.0
+dt = 0.001
+amplitudes = np.array([1.0, 1.5, 1.2])
+frecuencias = np.array([50, 500, 200])
+ruido = 0.1
+
+# Generar datos con y sin ruido
+ts, ys_sin_ruido = datos_prueba(t_max, dt, amplitudes, frecuencias, ruido=0.0)
+_, ys_con_ruido = datos_prueba(t_max, dt, amplitudes, frecuencias, ruido=ruido)
+
+def Fourier(t:NDArray[float], y:NDArray[float], f:NDArray[float]) -> complex:
+      r = np.zeros((len(f), len(t)), dtype=complex)
+      for j in range(len(f)):
+            for i in range(len(t)):
+                r [j,i] = (y[i]* np.exp(-2j * np.pi * t[i] * f[j]))
+      return np.sum((r), axis=1 )
+
+
+frecuencias= np.linspace(0, 300, 50)
+Fourier_sin_ruido= Fourier(ts, ys_sin_ruido, frecuencias )
+Fourier_con_ruido = Fourier(ts, ys_con_ruido, frecuencias)
+
+
+fig, ax = plt.subplots(1,2, figsize=(10,6), layout='constrained')
+ax[0].bar(frecuencias , abs(Fourier_sin_ruido),  width = 5  )
+ax[0].set_title("Frecuencia (Hz) vs Magnitud sin ruido ")
+ax[0].set_xlabel("Frecuencia (Hz)")
+ax[0].set_ylabel("Magnitud")
+ax[0].grid(True)
+ax[1].bar(frecuencias , abs(Fourier_con_ruido),  width = 5)
+ax[1].set_title("Frecuencia (Hz) vs Magnitud con ruido ")
+ax[1].set_xlabel("Frecuencia (Hz)")
+ax[1].set_ylabel("Magnitud")
+plt.savefig("1.a.pdf")
+
+print("1.a) Aumento de ruido magnifica todas las frecuencias  y genera desorden al momento de observar la sinuosoidal.")
+
 
 ##################################
 #########  PARTE 3
