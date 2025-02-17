@@ -221,40 +221,56 @@ print("Los resultados fueron guardados en 1.c.pdf y 1.c_spectrogram.pdf.")
 #########  PARTE 2. Transformada rápida
 ##################################
 #2.a. Comparativa
-H_field = pd.read_csv('H_field.csv')
-t = H_field['t'].values
-H = H_field['H'].values
-
+# Paso 2: Aplicar la Transformada Rápida de Fourier
 H_fft = np.fft.rfft(H)
 
+# Paso 3: Obtener las frecuencias
 Delta_t = np.mean(np.diff(t))  # Promedio de las diferencias de tiempo
 n = len(H)
 f = np.fft.rfftfreq(n, Delta_t)
 
+# Paso 4: Encontrar la frecuencia de oscilación más significativa
 mag = np.abs(H_fft)
 
+# Encontramos el índice de la frecuencia máxima
 pico_index = np.argmax(mag)
-f_fast = mag[pico_index]
+f_fast = f[pico_index]
 
+print(f'La frecuencia de oscilación f_fast es: {f_fast} Hz')
 
-def Fourier(t: NDArray[float], y: NDArray[float], f: NDArray[float]) -> NDArray[complex]:
+def Fourier(t: np.ndarray, y: np.ndarray, f: np.ndarray) -> np.ndarray:
     r = np.zeros((len(f), len(t)), dtype=complex)
     for j in range(len(f)):
         for i in range(len(t)):
             r[j, i] = y[i] * np.exp(-2j * np.pi * t[i] * f[j])
     return np.sum(r, axis=1)
 
-f_gen = np.linspace(0, 300, 50)  # Ajusta el rango según sea necesario
+# Paso 3: Definir las frecuencias
+f_gen = np.linspace(0, 14, 1050)  # Ajusta el rango según sea necesario
 
+# Calcular la transformada de Fourier
 Fourier_transformada_gen = Fourier(t, H, f_gen)
 
+# Paso 4: Calcular la magnitud y encontrar la frecuencia máxima
 mag_gen = np.abs(Fourier_transformada_gen)
-frecuencia_maxima_gen = f_gen[np.argmax(mag_gen)]
+f_general = f_gen[np.argmax(mag_gen)]
 
-print(f"2.a) {f_fast = :.5f}; {f_general = }")
+# Paso 5: Visualizar los resultados
+plt.figure(figsize=(15, 8))
+plt.plot(f_gen, mag_gen)#, width=5, color='red')
+plt.title("Frecuencia (Hz) vs Magnitud", fontsize=18)
+plt.xlabel("Frecuencia (Hz)", fontsize=16)
+plt.ylabel("Magnitud", fontsize=16)
+plt.tick_params(axis='both', labelsize=13)
+plt.grid(True)
+plt.show()
 
-# Crear un subplot para comparar las gráficas de las transformadas
-fig, ax = plt.subplots(2, 1, figsize=(15, 12), constrained_layout=True)
+# Imprimir la frecuencia máxima
+print(f'La frecuencia máxima es: {f_general} Hz')
+
+
+# Crear un subplot
+fig, ax = plt.subplots(2, 1, figsize=(15, 12), constrained_layout=True, sharex=True)
 
 # Gráfica 1: FFT
 ax[0].plot(f, mag, "-", color='blue')
@@ -266,14 +282,16 @@ ax[0].tick_params(axis='both', labelsize=13)
 ax[0].grid()
 
 # Gráfica 2: Método General
-ax[1].bar(f_gen, mag_gen, width=5, color='red')
+ax[1].plot(f_gen, mag_gen)#, width=5, color='red')
 ax[1].set_title("Frecuencia (Hz) vs Magnitud", fontsize=18)
 ax[1].set_xlabel("Frecuencia (Hz)", fontsize=16)
 ax[1].set_ylabel("Magnitud", fontsize=16)
 ax[1].tick_params(axis='both', labelsize=13)
 ax[1].grid(True)
 
+# Mostrar la figura
 plt.show()
+
 
 phi_fast = np.mod(f_fast * t, 1)
 phi_general = np.mod(f_general * t, 1)
@@ -292,19 +310,21 @@ plt.grid(True)
 plt.savefig('2.a.pdf')
 plt.show()
 
-#2.b Manchas solares
-datos = pd.read_csv("Taller 2\\manchas.txt", sep=r'\s+', header=1, names=["Year", "Month", "Day", "SSN"], engine="python")
-datos = datos.dropna()
 
+#2.b Manchas solares
 datos_filtrados = datos[
     (datos["Year"] < 2012) |  
     ((datos["Year"] == 2012) & (datos["Month"] == 1) & (datos["Day"] == 1))  
 ].copy()  
 
-datos_filtrados.loc[:, "Date"] = pd.to_datetime(datos_filtrados[["Year", "Month", "Day"]])
-
-fechas = datos_filtrados["Date"].to_numpy()
+datos_filtrados["datetime"] = pd.to_datetime(datos_filtrados.drop("SSN", axis=1))
+fechas = datos_filtrados["datetime"]
 manchas = datos_filtrados["SSN"].to_numpy()
+
+if len(manchas) > len(fechas):
+    manchas_recortadas = manchas[:len(fechas)]  # Tomar solo los primeros valores para que coincidan
+else:
+    manchas_recortadas = manchas
 
 # Transformada
 transformada_sol = np.fft.rfft(manchas)
@@ -339,7 +359,7 @@ plt.grid(True)
 plt.show()
 
 # Ejecutando el código, se observa un pico en la región entre 10^-4 y 10^-3 Hz
-# Seleccionando los datos en esa región de las frecuencias
+# Seleccionando los datos en esa región
 
 mask = (f_sol >= 1e-4) & (f_sol <= 1e-3)
 
@@ -351,19 +371,59 @@ indice_max_check = np.argmax(mag_filtrada)
 frecuencia_max_sol_check = f_sol_filtrada[indice_max_check]
 mag_max_sol_check = mag_filtrada[indice_max_check]
 
-print("Frecuencia máxima aplicando el recorte (Hz):", f"{frecuencia_max_sol_check:e}")
+print("Frecuencia máxima limitando los datos al intervalo 10⁻⁴ y 10⁻³ Hz:", f"{frecuencia_max_sol_check:e}")
 
 if frecuencia_max_sol_check != 0:
-    P_solar = 1 / frecuencia_max_sol_check  # El período en días
-    P_solar_años = P_solar / 365.25  # Convertir a años
-    print(f'2.b.a) P_solar = {P_solar_años} años')
+    P_solar_check = 1 / frecuencia_max_sol_check  # El período en días
+    P_solar_check_años = P_solar_check / 365.25  # Convertir a años
+    print(f'2.b.a) P_solar = {P_solar_check_años} años')
 else:
     print("No se encontró una frecuencia significativa.")
 
-
 # 2.b.b
 
+# Parámetros
+M = 50  # Número de armónicos
+N = len(mag_sol)  # Longitud de los datos originales
+start_date = pd.to_datetime('2012-01-02')
+end_date = pd.to_datetime('2025-02-17')
 
+# Crear un rango de días desde la primera fecha hasta la fecha final deseada
+fechas_rango = pd.date_range(start=start_date, end=end_date, freq='D')
+t = np.arange(len(fechas_rango))  # Días desde el inicio de la predicción
+
+# Lista para almacenar los valores de la predicción
+y_pred_manual = []
+
+# Calcular la reconstrucción de la señal iterando sobre cada valor de t
+for t_i in t:
+    y_value = np.real((1/N) * np.sum(mag_sol[:M] * 0.5 * np.exp(2j * np.pi * f_sol[:M] * t_i)))
+    y_pred_manual.append(y_value)
+
+# Convertir la lista a un array de NumPy
+y_pred_manual = np.array(y_pred_manual)
+y_t=y_pred_manual[-1]
+print(f'2.b.b n_manchas_hoy = {y_t}')
+
+
+# Graficar la predicción utilizando el bucle for
+plt.figure(figsize=(15, 6))
+plt.plot(fechas_rango, y_pred_manual, label="Predicción de manchas solares", color='red')
+plt.plot(fechas, manchas, label="Mediciones", color="orange")
+
+# Formato del eje x
+plt.gca().xaxis.set_major_locator(mdates.YearLocator(2))  # Cada 2 años
+plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y'))  # Mostrar solo el año
+
+plt.xlabel("Fecha", fontsize=14)
+plt.ylabel("Número de manchas solares", fontsize=14)
+plt.title("Manchas solares", fontsize=16)
+plt.legend()
+plt.grid(True)
+plt.xticks(rotation=45)
+plt.show()
+
+plt.savefig("2.b.pdf", format='pdf')
 
 ##################################
 #########  PARTE 3
