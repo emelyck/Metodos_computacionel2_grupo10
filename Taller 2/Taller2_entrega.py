@@ -217,6 +217,7 @@ print("Los resultados fueron guardados en 1.c.pdf y 1.c_spectrogram.pdf.")
 
 # Conclusiones impresas
 print("Los resultados fueron guardados en 1.c.pdf y 1.c_spectrogram.pdf.")
+
 ##################################
 #########  PARTE 2. Transformada rápida
 ##################################
@@ -310,6 +311,7 @@ plt.grid(True)
 plt.savefig('2.a.pdf')
 plt.show()
 
+print(f"2.a) {f_fast = :.5f}; {f_general = }")
 
 #2.b Manchas solares
 datos_filtrados = datos[
