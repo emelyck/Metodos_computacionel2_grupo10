@@ -134,47 +134,29 @@ axs[1].legend()
 axs[1].set_facecolor("#e8f4f8")
 
 plt.tight_layout()
-plt.show()
 ###1.C
 
 # Cargar los datos usando el método de la tarea anterior
 with open('OGLE-LMC-CEP-0001.dat', 'r') as file:
     lines = file.readlines()
 
-# Separar caracteres y ajustar formato
+# Procesar los datos
 Listas = []
 for line in lines:
-    nueva_cadena = line.replace("\n", "")
-    pos = [i for i, char in enumerate(line) if char == '.']
-
-    if len(pos) > 1 and line[pos[1]-2] != " ":
-        if line[pos[1]-2] == "-":
-            nueva_cadena = nueva_cadena[:pos[1]-2] + " " + nueva_cadena[pos[1]-2:]
-        else:
-            nueva_cadena = nueva_cadena[:pos[1]-1] + " " + nueva_cadena[pos[1]-1:]
-
-    pos = [i for i, char in enumerate(nueva_cadena) if char == '.']
-    if len(pos) > 2 and nueva_cadena[pos[2]-2] != " ":
-        if nueva_cadena[pos[2]-2] == "-":
-            nueva_cadena = nueva_cadena[:pos[2]-2] + " " + nueva_cadena[pos[2]-2:]
-        else:
-            nueva_cadena = nueva_cadena[:pos[2]-1] + " " + nueva_cadena[pos[2]-1:]
-
-    Listas.append(nueva_cadena.split(" "))
-
+    nueva_cadena = line.replace("\n", "").split()
+    Listas.append(nueva_cadena)
 Matriz = np.array(Listas, dtype=float)
+
 time = Matriz[:, 0]  # Columna de tiempo (días)
 intensity = Matriz[:, 1]  # Columna de intensidad
 y_uncertainty = Matriz[:, 2]  # Columna de incertidumbre
 
-# 1. Frecuencia de Nyquist
-# Calcular las diferencias temporales
-delta_t = np.diff(time)  # Diferencias entre tiempos consecutivos
-
+# 1. Analizar las diferencias temporales para Nyquist
+delta_t = np.diff(time)
 if len(delta_t) == 0:
     raise ValueError("No se encontraron diferencias temporales. Verifica los datos cargados.")
 
-# Histograma de diferencias temporales para encontrar el intervalo más común
+# Histograma de diferencias temporales
 plt.figure(figsize=(8, 6))
 plt.hist(delta_t, bins=50, alpha=0.7, color='blue', label="Intervalos de tiempo")
 plt.xlabel("Intervalo de tiempo (días)")
@@ -183,17 +165,19 @@ plt.title("Histograma de diferencias temporales")
 plt.grid(True)
 plt.savefig("1.c_histogram.pdf")
 
-# Usar el intervalo mínimo relevante para Nyquist
-min_delta_t = np.min(delta_t)
-nyquist_frequency = 1 / (2 * min_delta_t)  # Fórmula de Nyquist
-print(f"1.c) f Nyquist: {nyquist_frequency:.4f} 1/día")
+# Calcular la frecuencia de Nyquist usando la mediana
+t_median = np.median(delta_t)
+f_nyquist = 1 / (2 * t_median)
+print(f"1.c) f Nyquist: {f_nyquist:.4f} 1/día")
+
+# Aplicar un filtro pasa-bajas basado en Nyquist
+fc = f_nyquist * 0.5  # Frecuencia de corte por debajo de Nyquist
+b, a = butter(4, fc / f_nyquist, btype='low', analog=False)
+filtered_intensity = filtfilt(b, a, intensity)
 
 # 2. Transformada de Fourier para encontrar f_true
-# Quitar el promedio de la señal
-adjusted_intensity = intensity - np.mean(intensity)
-
-# Definir el rango de frecuencias
-frequencies = np.linspace(0, 8, 5000)  # 0/día a 8/día con alta densidad
+adjusted_intensity = filtered_intensity - np.mean(filtered_intensity)
+frequencies = np.linspace(0, 8, 5000)
 fourier_transform = np.array([np.sum(adjusted_intensity * np.exp(-2j * np.pi * f * time)) for f in frequencies])
 amplitude_spectrum = np.abs(fourier_transform)
 
@@ -203,12 +187,12 @@ if len(peaks) == 0:
     raise ValueError("No se encontraron picos en el espectrograma. Verifica los datos y el rango de frecuencias.")
 
 # Encontrar el pico más prominente
-prominent_peak_idx = peaks[np.argmax(amplitude_spectrum[peaks])]  # Índice del pico más prominente
-f_true = frequencies[prominent_peak_idx]  # Frecuencia de oscilación verdadera
+prominent_peak_idx = peaks[np.argmax(amplitude_spectrum[peaks])]
+f_true = frequencies[prominent_peak_idx]
 print(f"1.c) f true: {f_true:.4f} 1/día")
 
 # 3. Validación con la fase
-phi = np.mod(f_true * time, 1)  # Calcular la fase
+phi = np.mod(f_true * time, 1)
 plt.figure(figsize=(8, 6))
 plt.scatter(phi, intensity, alpha=0.7, s=10, label="Datos ajustados")
 plt.xlabel("Fase (φ)")
@@ -228,6 +212,8 @@ plt.title("Espectrograma de la señal")
 plt.grid(True)
 plt.legend()
 plt.savefig("1.c_spectrogram.pdf")
+
+print("Los resultados fueron guardados en 1.c.pdf y 1.c_spectrogram.pdf.")
 
 # Conclusiones impresas
 print("Los resultados fueron guardados en 1.c.pdf y 1.c_spectrogram.pdf.")
