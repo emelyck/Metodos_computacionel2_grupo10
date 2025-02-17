@@ -62,66 +62,79 @@ print("1.a) Aumento de ruido magnifica todas las frecuencias  y genera desorden
 
 
 #1.b 
-# Parámetros iniciales
-t_max_values = np.linspace(10, 300, 15)  # Rango de tiempo de 10s a 300s
-dt = 0.001
-amplitudes = np.array([1.0])  # Una sola amplitud
-frecuencia_conocida = 50  # Frecuencia conocida en Hz
-total_frequencies = 500  # Resolución en el eje de frecuencias
 
-@jit(nopython=True)
-def calculate_fwhm(frequencies: NDArray[np.float64], amplitudes: NDArray[np.float64]) -> float:
-    """Calcular el ancho completo a media altura (FWHM)."""
-    peak_index = np.argmax(amplitudes)  # Índice del pico más alto
-    peak_height = amplitudes[peak_index]  # Altura máxima
-    half_height = peak_height / 2  # Mitad de altura
-
-    # Encontrar índices donde cruza la mitad de altura
-    left_index = np.where(amplitudes[:peak_index] <= half_height)[0][-1]
-    right_index = np.where(amplitudes[peak_index:] <= half_height)[0][0] + peak_index
-
-    return frequencies[right_index] - frequencies[left_index]  # Ancho del pico
-
-@jit(nopython=True)
-def Fourier(t: NDArray[np.float64], y: NDArray[np.float64], f: NDArray[np.float64]) -> NDArray[np.complex128]:
-    """Calcular la transformada de Fourier de una señal."""
-    result = np.zeros(len(f), dtype=np.complex128)
-    for j in range(len(f)):
-        result[j] = np.sum(y * np.exp(-2j * np.pi * t * f[j]))
-    return result
-
-@jit(nopython=True)
-def datos_prueba(t_max: float, dt: float, amplitudes: NDArray[np.float64], frecuencias: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-    """Generar datos de prueba con una frecuencia conocida."""
-    ts = np.linspace(0, t_max, int(t_max / dt))
-    ys = np.zeros_like(ts)
+# Función para generar datos de prueba
+def datos_prueba(t_max, dt, amplitudes, frecuencias, ruido=0.0):
+    ts = np.arange(0., t_max, dt)
+    ys = np.zeros_like(ts, dtype=float)
     for A, f in zip(amplitudes, frecuencias):
         ys += A * np.sin(2 * np.pi * f * ts)
+    ys += np.random.normal(loc=0, size=len(ys), scale=ruido) if ruido else 0
     return ts, ys
 
-# Almacenar valores de FWHM para diferentes t_max
-fwhm_values = []
-for t_max in t_max_values:
-    ts, ys = datos_prueba(t_max, dt, amplitudes, np.array([frecuencia_conocida]))
-    f = np.linspace(0, 100, total_frequencies)  # Rango de frecuencias de interés
-    fourier_result = Fourier(ts, ys, f)  # Calcular transformada de Fourier
+# Función para calcular el FWHM en función de t_max
+def obtener_FWHM_por_t(t_max_values, dt, amplitudes, frecuencias, ruido):
+    fwhm_values = []
+    for t_max in t_max_values:
+        ts, ys = datos_prueba(t_max, dt, amplitudes, frecuencias, ruido)
+        
+        # Transformada de Fourier
+        fft_values = np.fft.fft(ys)
+        fs = np.fft.fftfreq(len(ts), d=dt)
+        abs_fft_values = np.abs(fft_values)
 
-    amplitudes_fourier = np.abs(fourier_result)  # Amplitud absoluta de la transformada
-    fwhm = calculate_fwhm(f, amplitudes_fourier)  # Calcular el FWHM
-    fwhm_values.append(fwhm)
+        # Encontrar picos y calcular FWHM
+        peaks, _ = find_peaks(abs_fft_values, height=0.5)
+        if len(peaks) > 0:
+            widths, _, _, _ = peak_widths(abs_fft_values, peaks, rel_height=0.5)
+            fwhm = widths[0] * (fs[1] - fs[0]) 
+            fwhm_values.append(fwhm)
+        else:
+            fwhm_values.append(np.nan)
 
-# Graficar FWHM vs t_max (log-log)
-plt.figure(figsize=(8, 6))
-plt.loglog(t_max_values, fwhm_values, marker='o', label='FWHM vs t_max')
-plt.title("FWHM del pico vs t_max en escala log-log")
-plt.xlabel("t_max (s)")
-plt.ylabel("FWHM")
-plt.legend()
-plt.savefig("1.b.pdf")  # Guardar la gráfica
+    # Eliminar valores NaN
+    valid_indices = ~np.isnan(fwhm_values)
+    return t_max_values[valid_indices], np.array(fwhm_values)[valid_indices]
+
+# Parámetros iniciales
+dt = 0.001
+amplitudes = np.array([1.0])
+frecuencias = np.array([50])  # Frecuencia central
+ruido = 0.0
+t_max_values = np.linspace(10, 300, 50)  # Valores de t_max
+
+# Obtener los valores de FWHM
+t_max_values_clean, fwhm_values_clean = obtener_FWHM_por_t(t_max_values, dt, amplitudes, frecuencias, ruido)
+
+# Ajuste de la relación FWHM ~ 1/t
+fit_params = np.polyfit(np.log(t_max_values_clean), np.log(fwhm_values_clean), 1)
+ajuste_potencia = np.exp(fit_params[1]) * t_max_values_clean**fit_params[0]
+
+# Graficar resultados
+fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+# Gráfica log-log con estilo moderno
+axs[0].loglog(t_max_values_clean, fwhm_values_clean, 'o', label="Datos", color='darkred')
+axs[0].loglog(t_max_values_clean, ajuste_potencia, '--', label="Ajuste", color='black')
+axs[0].set_xlabel("t_max (s)")
+axs[0].set_ylabel("FWHM (Hz)")
+axs[0].set_title("FWHM vs t_max (log-log)")
+axs[0].grid(True, linestyle='--', alpha=0.6)
+axs[0].legend()
+axs[0].set_facecolor("#f5f5f5")
+
+# Gráfica lineal con diferente estilo
+axs[1].plot(t_max_values_clean, fwhm_values_clean, 's', label="Datos", color='blue')
+axs[1].plot(t_max_values_clean, ajuste_potencia, ':', label="Ajuste", color='green')
+axs[1].set_xlabel("t_max (s)")
+axs[1].set_ylabel("FWHM (Hz)")
+axs[1].set_title("FWHM vs t_max (lineal)")
+axs[1].grid(True, linestyle='-.', alpha=0.5)
+axs[1].legend()
+axs[1].set_facecolor("#e8f4f8")
+
+plt.tight_layout()
 plt.show()
-
-print("1.b) Se generó el gráfico 1.b.pdf mostrando el FWHM vs t_max en escala log-log.")
-
 ###1.C
 
 # Cargar los datos usando el método de la tarea anterior
