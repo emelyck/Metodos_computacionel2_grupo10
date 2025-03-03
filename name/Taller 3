@@ -1,0 +1,461 @@
+import numpy as np
+from scipy.integrate import solve_ivp
+import matplotlib.pyplot as plt
+
+
+#1.a)
+
+m = 10 ; v0 = 10; g = 9.773 ; b = 0
+ 
+# Ecuaciones de movimiento con fricción
+def motion_equations(t, y):
+    ux, uy, x, y_pos = y
+    speed = np.sqrt(ux**2 + uy**2)**2 
+    dux_dt = -b * ux * speed / m
+    duy_dt = -g - b * uy * speed / m
+    dx_dt = ux ; dy_dt = uy
+    return [dux_dt, duy_dt, dx_dt, dy_dt]
+
+#Arreglo para el valor dónde el piso toca el suelo 
+def hit_ground(t, y):
+    return y[3] 
+hit_ground.terminal = True #Termina la integración cuando el evento que tocó el piso acabó
+hit_ground.direction = -1 # Cambia la dirección del evento 
+
+angles = np.linspace(0, 90, 91); ranges = []; max_range = 0; best_angle = 0
+
+for angle in angles:
+    rad = np.radians(angle)
+    initial_conditions = [v0 * np.cos(rad), v0 * np.sin(rad), 0, 0]
+    sol = solve_ivp(motion_equations, [0, 10], initial_conditions, events=hit_ground, dense_output=False)
+    
+    if sol.t_events[0].size > 0: 
+        range_at_angle = sol.y_events[0][0, 2]
+        ranges.append(range_at_angle)
+        if range_at_angle > max_range:
+            max_range = range_at_angle
+            best_angle = angle
+    else:
+        ranges.append(0)
+
+print(f"El ángulo óptimo para 𝛽 {b}: {best_angle}° con un alcance de: {max_range:.2f}.")
+
+#1.b) 
+E_initial = 0.5 * m * v0**2 ; betas = np.linspace(0, 2, 91)
+
+def hit_ground(t, y, beta):
+    return y[3]
+hit_ground.terminal = True
+hit_ground.direction = -1
+
+def motion(t, y, beta):
+    ux, uy, x, y_pos, energy_acc = y 
+    speed = np.sqrt(ux**2 + uy**2)
+    dux_dt = -beta * ux * speed / m
+    duy_dt = -g - beta * uy * speed / m
+    dx_dt = ux ; dy_dt = uy
+    power_friction = beta * speed**3 
+    return [dux_dt, duy_dt, dx_dt, dy_dt, power_friction]
+
+best_angles = []; energy_losses = []
+
+for beta in betas:
+    max_range = 0; best_angle = 0
+    for angle in np.linspace(0, 90, 91):
+        rad = np.radians(angle)
+        initial_conditions = [v0 * np.cos(rad), v0 * np.sin(rad), 0, 0, 0]
+        sol = solve_ivp(motion, [0, 10], initial_conditions, args=(beta,), events=hit_ground, dense_output=False)
+        
+        if sol.t_events[0].size > 0:
+            range_at_angle = sol.y_events[0][0, 2]
+            if range_at_angle > max_range:
+                max_range = range_at_angle ; best_angle = angle
+    
+    rad = np.radians(best_angle)
+    initial_conditions = [v0 * np.cos(rad), v0 * np.sin(rad), 0, 0, 0]
+    sol = solve_ivp(motion, [0, 10], initial_conditions, args=(beta,), events=hit_ground, vectorized=True, dense_output=True)
+    if sol.y.shape[1] > 0:
+        energy_lost = np.trapz(sol.y[4], sol.t)  
+        energy_losses.append(energy_lost)
+    else:
+        energy_losses.append(0)
+    
+    best_angles.append(best_angle)
+
+fig, ax = plt.subplots(2, 1, figsize=(12, 12))
+
+ax[0].step(betas, best_angles, where='mid', label='Ángulo óptimo', color='yellow')
+ax[0].set_xscale('log')
+ax[0].set_title('θ vs. β')
+ax[0].set_xlabel(' β')
+ax[0].set_ylabel(' θ (grados)')
+ax[0].grid(True)
+
+ax[1].step(betas, best_angles, where='mid', label='Ángulo óptimo', color='yellow')
+ax[1].set_title('θ vs  β')
+ax[1].set_xlabel('β')
+ax[1].set_ylabel(' θ (grados)')
+ax[1].grid(True)
+plt.savefig("1.a).pdf")
+
+fig, ax = plt.subplots(2, 1, figsize=(12, 12))
+
+ax[0].step(betas, energy_losses, where='mid', label='Ángulo óptimo', color='yellow')
+ax[0].set_xscale('log')
+ax[0].set_title('θ vs β')
+ax[0].set_xlabel(' β')
+ax[0].set_ylabel(' θ (grados)')
+ax[0].grid(True)
+
+ax[1].step(betas, energy_losses, where='mid', label='Ángulo óptimo', color='yellow')
+ax[1].set_title('θ vs. β')
+ax[1].set_xlabel(' β')
+ax[1].set_ylabel(' θ (grados)')
+plt.savefig("1.b).pdf")
+
+#punto 4
+# Definir la ecuación de Schrödinger en forma adimensional
+def schrodinger(x, psi, E):
+    f, dfdx = psi
+    return [dfdx, (x**2 - 2*E) * f]
+
+# Resolver la ecuación para un rango de valores de E
+def solve_schrodinger(E, x_range, initial_conditions):
+    sol = solve_ivp(schrodinger, [x_range[0], x_range[1]], initial_conditions, args=(E,), t_eval=np.linspace(x_range[0], x_range[1], 1000))
+    return sol.t, sol.y[0]
+
+# Definir las condiciones iniciales y el rango de x
+x_range = [-6, 6]
+initial_conditions_symmetric = [1, 0]    # Forma simétrica
+initial_conditions_antisymmetric = [0, 1] # Forma antisimétrica
+
+# Encontrar las primeras cinco energías permitidas
+def find_energies(initial_conditions, num_energies):
+    energies = []
+    for E in np.linspace(0, 25, 1000):  # Rango amplio de E para buscar
+        x, psi = solve_schrodinger(E, x_range, initial_conditions)
+        if np.abs(psi[-1]) < 0.01:  # Verificar si la solución no es divergente
+            energies.append(E)
+            if len(energies) == num_energies:
+                break
+    return energies
+
+# Encontrar y graficar las soluciones para las dos formas
+energies_symmetric = find_energies(initial_conditions_symmetric, 5)
+energies_antisymmetric = find_energies(initial_conditions_antisymmetric, 5)
+
+# Imprimir las energías encontradas
+print("Energías simétricas:", energies_symmetric)
+print("Energías antisimétricas:", energies_antisymmetric)
+
+for i, E in enumerate(energies_symmetric + energies_antisymmetric):
+    x, psi = solve_schrodinger(E, x_range, initial_conditions_symmetric if i < len(energies_symmetric) else initial_conditions_antisymmetric)
+    envelope = np.exp(-0.1 * (x)**2)  # Suavizado parabólico en los extremos
+    plt.plot(x, psi * envelope + i * 2, label=f'E = {E:.2f}')
+
+# Dibujar el potencial armónico como una parábola grande
+x_potential = np.linspace(-6, 6, 1000)
+potential = 0.5 * x_potential**2  # Ajuste para ocupar más espacio visualmente
+plt.plot(x_potential, potential, 'k--', alpha=0.5, linewidth=2, label='Potencial armónico')
+
+plt.xlabel('x')
+plt.ylabel('$\psi(x)$ y Energía')
+plt.title('Soluciones de la ecuación de Schrödinger para el oscilador armónico')
+plt.legend()
+
+#punto 2 taller b 
+# Parámetros del problema
+L = 2  # Longitud del dominio
+Nx = 100  # Número de puntos espaciales
+dx = L / (Nx - 1)  # Paso espacial
+c = 1  # Velocidad de la onda
+dt = 0.005  # Paso temporal
+Nt = 400  # Número de pasos de tiempo
+
+# Condición de estabilidad de Courant
+C = c * dt / dx
+assert C < 1, "El coeficiente de Courant debe ser menor que 1 para estabilidad."
+
+# Malla espacial
+x = np.linspace(0, L, Nx)
+
+# Condición inicial
+u0 = np.exp(-125 * (x - 0.5) ** 2)
+u_prev = np.copy(u0)
+u = np.copy(u0)
+u_next = np.zeros_like(u)
+
+# Función para aplicar condiciones de frontera
+def aplicar_condiciones_de_frontera(u, tipo):
+    if tipo == "Dirichlet":
+        u[0] = 0
+        u[-1] = 0
+    elif tipo == "Neumann":
+        u[0] = u[1]
+        u[-1] = u[-2]
+    elif tipo == "Periódicas":
+        u[0] = u[-2]
+        u[-1] = u[1]
+    return u
+
+# Inicialización de la figura
+fig, axes = plt.subplots(3, 1, figsize=(6, 8))
+tipos = ["Dirichlet", "Neumann", "Periódicas"]
+lines = []
+for ax, tipo in zip(axes, tipos):
+    ax.set_xlim(0, L)
+    ax.set_ylim(-1, 1)
+    ax.set_title(f"Condición de frontera: {tipo}")
+    ax.set_xlabel("x")
+    ax.set_ylabel("u")
+    ax.grid(True)
+    line, = ax.plot(x, u, lw=2, color='yellow')
+    lines.append(line)
+
+def actualizar(frame):
+    global u_prev, u, u_next
+    for i, tipo in enumerate(tipos):
+        u_next[1:-1] = (2 * u[1:-1] - u_prev[1:-1] + C**2 * (u[2:] - 2 * u[1:-1] + u[:-2]))
+        u_next = aplicar_condiciones_de_frontera(u_next, tipo)
+        lines[i].set_ydata(u_next)
+        u_prev, u = np.copy(u), np.copy(u_next)
+    return lines
+
+# Crear animación
+ani = animation.FuncAnimation(fig, actualizar, frames=Nt, interval=dt * 1000, blit=True)
+
+# Guardar el video
+ani.save("2.mp4", writer="ffmpeg", fps=30)
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+import matplotlib as mpl
+import imageio_ffmpeg
+import scipy.fftpack
+import pandas as pd
+
+# PUNTO 3
+# Parámetros del problema
+alpha = 0.022  # Coeficiente de dispersión
+L = 2.0  # Longitud del dominio
+N = 256  # Número de puntos espaciales
+dx = L / N  # Espaciado espacial
+dt = 0.0001  # Paso de tiempo
+T_max = 2000  # Tiempo de simulación
+num_frames = 100  # Número de cuadros en la animación
+
+# Malla espacial y condición inicial
+x = np.linspace(0, L, N, endpoint=False)
+psi = np.cos(np.pi * x)
+
+# Diferencias finitas: Matriz de derivadas (según esquema del artículo)
+def deriv1(f):
+    """Derivada primera con diferencias finitas centradas."""
+    return (np.roll(f, -1) - np.roll(f, 1)) / (2 * dx)
+
+def deriv3(f):
+    """Derivada tercera con diferencias finitas."""
+    return (np.roll(f, -2) - 2 * np.roll(f, -1) + 2 * np.roll(f, 1) - np.roll(f, 2)) / (2 * dx**3)
+
+# Almacenar evolución para la animación
+frames = []
+
+# Simulación temporal usando esquema explícito
+t = 0
+while t < T_max:
+    psi_new = psi - dt * (psi * deriv1(psi) + alpha**2 * deriv3(psi))
+    psi = psi_new.copy()  # Actualizar valores
+    t += dt
+
+    # Guardar cada cierto número de pasos para la animación
+    if len(frames) < num_frames and t % (T_max / num_frames) < dt:
+        frames.append(psi.copy())
+
+# Convertir lista de resultados en un array
+frames = np.array(frames)
+
+# Crear animación
+fig, ax = plt.subplots(figsize=(8, 4))
+cax = ax.imshow(frames.T, aspect='auto', origin='lower', extent=[0, T_max, 0, L], cmap='magma')
+ax.set_xlabel("Time [s]")
+ax.set_ylabel("Angle x [m]")
+fig.colorbar(cax, label=r"$\psi(t, x)$")
+
+# Convertir lista de resultados en un DataFrame
+df_frames = pd.DataFrame(frames)
+
+# Guardar los datos en un archivo CSV (opcional)
+df_frames.to_csv("evolucion_kdv.csv", index=False)
+
+# Mostrar los primeros valores para inspección
+print(df_frames.head())
+
+# Visualización con matplotlib
+plt.imshow(df_frames.T, aspect='auto', origin='lower', cmap='magma')
+plt.colorbar(label=r"$\psi(t, x)$")
+plt.xlabel("Time Step")
+plt.ylabel("Spatial Position")
+plt.title("Evolución de la ecuación de KdV")
+plt.show()
+
+
+# PUNTO 4
+# Parámetros del problema
+dx = dy = 0.01  # Paso espacial (m)
+dt = 0.001  # Paso temporal (s)
+T = 2.0  # Tiempo total de simulación (s)
+f = 10  # Frecuencia de la fuente (Hz)
+A = 0.01  # Amplitud de la onda (m)
+c = 0.5  # Velocidad de onda en agua (m/s)
+c_lente = c / 5  # Velocidad dentro del lente
+Nx, Ny = 100, 200  # Tamaño de la malla
+Nt = int(T / dt)  # Número de pasos de tiempo
+
+# Verificación del coeficiente de Courant
+courant = c * dt / dx
+if courant >= 1:
+    raise ValueError("El coeficiente de Courant es mayor o igual a 1, reduce dt o aumenta dx")
+
+# Inicialización de la onda
+gu = np.zeros((Nx, Ny))  # Estado actual
+gu_prev = np.zeros((Nx, Ny))  # Estado anterior
+gu_next = np.zeros((Nx, Ny))  # Estado futuro
+
+# Mapa de velocidades
+c_map = np.full((Nx, Ny), c)  # Velocidad en todo el dominio
+
+# Definir la pared con la apertura
+w_y = int(0.04 / dy)  # Ancho de la pared en celdas
+w_x = int(0.4 / dx)  # Apertura en la pared
+y_mid = Ny // 2
+x_mid = Nx // 2
+c_map[:, y_mid - w_y//2 : y_mid + w_y//2] = 0  # Pared excepto en la apertura
+c_map[x_mid - w_x//2 : x_mid + w_x//2, y_mid - w_y//2 : y_mid + w_y//2] = c  # Apertura con velocidad normal
+
+# Definir el lente (zona de velocidad reducida)
+x_lente = Nx // 4
+y_lente = Ny // 2
+for i in range(Nx):
+    for j in range(Ny):
+        if ((i - x_lente)**2 / (0.1/dx)**2 + 3 * (j - y_lente)**2 / (0.1/dy)**2) <= 1/25:
+            c_map[i, j] = c_lente
+
+# Posición de la fuente
+x_src, y_src = int(0.5 / dx), int(0.5 / dy)
+
+# Configuración de la figura
+fig, ax = plt.subplots()
+ax.set_facecolor("black")  # Fondo negro
+im = ax.imshow(gu, vmin=-A, vmax=A, cmap='RdBu', animated=True)
+
+# Dibujar la pared y la apertura
+y_wall_start = y_mid - w_y//2
+y_wall_end = y_mid + w_y//2
+x_wall = np.arange(Nx)
+ax.plot([y_wall_start, y_wall_start], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_wall_end, y_wall_end], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [0, x_mid - w_x//2], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [x_mid + w_x//2, Nx-1], color="white", linewidth=2)
+
+def update(n):
+    global gu, gu_prev, gu_next
+    
+    # Aplicar la ecuación de onda con diferencias finitas
+    for i in range(1, Nx-1):
+        for j in range(1, Ny-1):
+            if c_map[i, j] != 0:  # No actualizar la pared
+                r = (c_map[i, j] * dt / dx) ** 2
+                gu_next[i, j] = (2 * gu[i, j] - gu_prev[i, j] +
+                                r * (gu[i+1, j] + gu[i-1, j] + gu[i, j+1] + gu[i, j-1] - 4 * gu[i, j]))
+    
+    # Fuente oscilante
+    gu_next[x_src, y_src] = A * np.sin(2 * np.pi * f * n * dt)
+    
+    # Actualizar estados
+    gu_prev, gu, gu_next = gu, gu_next, gu_prev
+    
+    im.set_array(gu)
+    return [im]
+
+ani = animation.FuncAnimation(fig, update, frames=Nt, interval=1000 * T / Nt, blit=True)
+ani.save("4.a.mp4", fps=10)
+plt.show()
+
+###Bono con condiciones iniciales realistas
+# Verificación del coeficiente de Courant
+courant = c * dt / dx
+if courant >= 1:
+    raise ValueError("El coeficiente de Courant es mayor o igual a 1, reduce dt o aumenta dx")
+
+# Inicialización de la onda
+gu = np.zeros((Nx, Ny))  # Estado actual
+gu_prev = np.zeros((Nx, Ny))  # Estado anterior
+gu_next = np.zeros((Nx, Ny))  # Estado futuro
+
+# Mapa de velocidades
+c_map = np.full((Nx, Ny), c)  # Velocidad en todo el dominio
+
+# Definir la pared con la apertura
+w_y = int(0.04 / dy)  # Ancho de la pared en celdas
+w_x = int(0.4 / dx)  # Apertura en la pared
+y_mid = Ny // 2
+x_mid = Nx // 2
+c_map[:, y_mid - w_y//2 : y_mid + w_y//2] = 0  # Pared excepto en la apertura
+c_map[x_mid - w_x//2 : x_mid + w_x//2, y_mid - w_y//2 : y_mid + w_y//2] = c  # Apertura con velocidad normal
+
+# Definir el lente (zona de velocidad reducida)
+x_lente = Nx // 4
+y_lente = Ny // 2
+for i in range(Nx):
+    for j in range(Ny):
+        if ((i - x_lente)**2 / (0.1/dx)**2 + 3 * (j - y_lente)**2 / (0.1/dy)**2) <= 1/25:
+            c_map[i, j] = c_lente
+
+# Posición de la fuente
+x_src, y_src = int(0.5 / dx), int(0.5 / dy)
+
+# Configuración de la figura
+fig, ax = plt.subplots()
+ax.set_facecolor("black")  # Fondo negro
+im = ax.imshow(gu, vmin=-A, vmax=A, cmap='RdBu', animated=True)
+
+# Dibujar la pared y la apertura
+y_wall_start = y_mid - w_y//2
+y_wall_end = y_mid + w_y//2
+x_wall = np.arange(Nx)
+ax.plot([y_wall_start, y_wall_start], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_wall_end, y_wall_end], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [0, x_mid - w_x//2], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [x_mid + w_x//2, Nx-1], color="white", linewidth=2)
+
+def update(n):
+    global gu, gu_prev, gu_next
+    
+    # Aplicar la ecuación de onda con diferencias finitas
+    for i in range(1, Nx-1):
+        for j in range(1, Ny-1):
+            if c_map[i, j] != 0:  # No actualizar la pared
+                r = (c_map[i, j] * dt / dx) ** 2
+                gu_next[i, j] = (2 * gu[i, j] - gu_prev[i, j] +
+                                r * (gu[i+1, j] + gu[i-1, j] + gu[i, j+1] + gu[i, j-1] - 4 * gu[i, j]))
+    
+    # Aplicar condiciones de frontera realistas (ondas reflejadas)
+    gu_next[0, :] = gu[1, :]
+    gu_next[-1, :] = gu[-2, :]
+    gu_next[:, 0] = gu[:, 1]
+    gu_next[:, -1] = gu[:, -2]
+    
+    # Fuente oscilante
+    gu_next[x_src, y_src] = A * np.sin(2 * np.pi * f * n * dt)
+    
+    # Actualizar estados
+    gu_prev, gu, gu_next = gu, gu_next, gu_prev
+    
+    im.set_array(gu)
+    return [im]
+
+ani = animation.FuncAnimation(fig, update, frames=Nt, interval=1000 * T / Nt, blit=True)
+ani.save("4.a bono.mp4", writer="ffmpeg", fps=10)
+plt.show()
