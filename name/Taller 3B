@@ -4,7 +4,72 @@ import matplotlib.animation as animation
 import matplotlib as mpl
 import imageio_ffmpeg
 
-## Punto 4
+# PUNTO 3
+# Parámetros del problema
+alpha = 0.022  # Coeficiente de dispersión
+L = 2.0  # Longitud del dominio
+N = 256  # Número de puntos espaciales
+dx = L / N  # Espaciado espacial
+dt = 0.0001  # Paso de tiempo
+T_max = 2000  # Tiempo de simulación
+num_frames = 100  # Número de cuadros en la animación
+
+# Malla espacial y condición inicial
+x = np.linspace(0, L, N, endpoint=False)
+psi = np.cos(np.pi * x)
+
+# Diferencias finitas: Matriz de derivadas (según esquema del artículo)
+def deriv1(f):
+    """Derivada primera con diferencias finitas centradas."""
+    return (np.roll(f, -1) - np.roll(f, 1)) / (2 * dx)
+
+def deriv3(f):
+    """Derivada tercera con diferencias finitas."""
+    return (np.roll(f, -2) - 2 * np.roll(f, -1) + 2 * np.roll(f, 1) - np.roll(f, 2)) / (2 * dx**3)
+
+# Almacenar evolución para la animación
+frames = []
+
+# Simulación temporal usando esquema explícito
+t = 0
+while t < T_max:
+    psi_new = psi - dt * (psi * deriv1(psi) + alpha**2 * deriv3(psi))
+    psi = psi_new.copy()  # Actualizar valores
+    t += dt
+
+    # Guardar cada cierto número de pasos para la animación
+    if len(frames) < num_frames and t % (T_max / num_frames) < dt:
+        frames.append(psi.copy())
+
+# Convertir lista de resultados en un array
+frames = np.array(frames)
+
+# Crear animación
+fig, ax = plt.subplots(figsize=(8, 4))
+cax = ax.imshow(frames.T, aspect='auto', origin='lower', extent=[0, T_max, 0, L], cmap='magma')
+ax.set_xlabel("Time [s]")
+ax.set_ylabel("Angle x [m]")
+fig.colorbar(cax, label=r"$\psi(t, x)$")
+
+# Convertir lista de resultados en un DataFrame
+df_frames = pd.DataFrame(frames)
+
+# Guardar los datos en un archivo CSV (opcional)
+df_frames.to_csv("evolucion_kdv.csv", index=False)
+
+# Mostrar los primeros valores para inspección
+print(df_frames.head())
+
+# Visualización con matplotlib
+plt.imshow(df_frames.T, aspect='auto', origin='lower', cmap='magma')
+plt.colorbar(label=r"$\psi(t, x)$")
+plt.xlabel("Time Step")
+plt.ylabel("Spatial Position")
+plt.title("Evolución de la ecuación de KdV")
+plt.show()
+
+
+# PUNTO 4
 # Parámetros del problema
 dx = dy = 0.01  # Paso espacial (m)
 dt = 0.001  # Paso temporal (s)
