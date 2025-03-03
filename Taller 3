@@ -113,5 +113,117 @@ ax[1].set_xlabel(' β')
 ax[1].set_ylabel(' θ (grados)')
 plt.savefig("1.b).pdf")
 
+#punto 4
+# Definir la ecuación de Schrödinger en forma adimensional
+def schrodinger(x, psi, E):
+    f, dfdx = psi
+    return [dfdx, (x**2 - 2*E) * f]
 
+# Resolver la ecuación para un rango de valores de E
+def solve_schrodinger(E, x_range, initial_conditions):
+    sol = solve_ivp(schrodinger, [x_range[0], x_range[1]], initial_conditions, args=(E,), t_eval=np.linspace(x_range[0], x_range[1], 1000))
+    return sol.t, sol.y[0]
+
+# Definir las condiciones iniciales y el rango de x
+x_range = [-6, 6]
+initial_conditions_symmetric = [1, 0]    # Forma simétrica
+initial_conditions_antisymmetric = [0, 1] # Forma antisimétrica
+
+# Encontrar las primeras cinco energías permitidas
+def find_energies(initial_conditions, num_energies):
+    energies = []
+    for E in np.linspace(0, 25, 1000):  # Rango amplio de E para buscar
+        x, psi = solve_schrodinger(E, x_range, initial_conditions)
+        if np.abs(psi[-1]) < 0.01:  # Verificar si la solución no es divergente
+            energies.append(E)
+            if len(energies) == num_energies:
+                break
+    return energies
+
+# Encontrar y graficar las soluciones para las dos formas
+energies_symmetric = find_energies(initial_conditions_symmetric, 5)
+energies_antisymmetric = find_energies(initial_conditions_antisymmetric, 5)
+
+# Imprimir las energías encontradas
+print("Energías simétricas:", energies_symmetric)
+print("Energías antisimétricas:", energies_antisymmetric)
+
+for i, E in enumerate(energies_symmetric + energies_antisymmetric):
+    x, psi = solve_schrodinger(E, x_range, initial_conditions_symmetric if i < len(energies_symmetric) else initial_conditions_antisymmetric)
+    envelope = np.exp(-0.1 * (x)**2)  # Suavizado parabólico en los extremos
+    plt.plot(x, psi * envelope + i * 2, label=f'E = {E:.2f}')
+
+# Dibujar el potencial armónico como una parábola grande
+x_potential = np.linspace(-6, 6, 1000)
+potential = 0.5 * x_potential**2  # Ajuste para ocupar más espacio visualmente
+plt.plot(x_potential, potential, 'k--', alpha=0.5, linewidth=2, label='Potencial armónico')
+
+plt.xlabel('x')
+plt.ylabel('$\psi(x)$ y Energía')
+plt.title('Soluciones de la ecuación de Schrödinger para el oscilador armónico')
+plt.legend()
+
+#punto 2 taller b 
+# Parámetros del problema
+L = 2  # Longitud del dominio
+Nx = 100  # Número de puntos espaciales
+dx = L / (Nx - 1)  # Paso espacial
+c = 1  # Velocidad de la onda
+dt = 0.005  # Paso temporal
+Nt = 400  # Número de pasos de tiempo
+
+# Condición de estabilidad de Courant
+C = c * dt / dx
+assert C < 1, "El coeficiente de Courant debe ser menor que 1 para estabilidad."
+
+# Malla espacial
+x = np.linspace(0, L, Nx)
+
+# Condición inicial
+u0 = np.exp(-125 * (x - 0.5) ** 2)
+u_prev = np.copy(u0)
+u = np.copy(u0)
+u_next = np.zeros_like(u)
+
+# Función para aplicar condiciones de frontera
+def aplicar_condiciones_de_frontera(u, tipo):
+    if tipo == "Dirichlet":
+        u[0] = 0
+        u[-1] = 0
+    elif tipo == "Neumann":
+        u[0] = u[1]
+        u[-1] = u[-2]
+    elif tipo == "Periódicas":
+        u[0] = u[-2]
+        u[-1] = u[1]
+    return u
+
+# Inicialización de la figura
+fig, axes = plt.subplots(3, 1, figsize=(6, 8))
+tipos = ["Dirichlet", "Neumann", "Periódicas"]
+lines = []
+for ax, tipo in zip(axes, tipos):
+    ax.set_xlim(0, L)
+    ax.set_ylim(-1, 1)
+    ax.set_title(f"Condición de frontera: {tipo}")
+    ax.set_xlabel("x")
+    ax.set_ylabel("u")
+    ax.grid(True)
+    line, = ax.plot(x, u, lw=2, color='yellow')
+    lines.append(line)
+
+def actualizar(frame):
+    global u_prev, u, u_next
+    for i, tipo in enumerate(tipos):
+        u_next[1:-1] = (2 * u[1:-1] - u_prev[1:-1] + C**2 * (u[2:] - 2 * u[1:-1] + u[:-2]))
+        u_next = aplicar_condiciones_de_frontera(u_next, tipo)
+        lines[i].set_ydata(u_next)
+        u_prev, u = np.copy(u), np.copy(u_next)
+    return lines
+
+# Crear animación
+ani = animation.FuncAnimation(fig, actualizar, frames=Nt, interval=dt * 1000, blit=True)
+
+# Guardar el video
+ani.save("2.mp4", writer="ffmpeg", fps=30)
 
