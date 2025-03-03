@@ -13,6 +13,10 @@ from scipy.integrate import solve_ivp
 import matplotlib.animation as animation
 from mpl_toolkits.mplot3d import Axes3D
 import numba as nb
+import matplotlib as mpl
+import imageio_ffmpeg
+import scipy.fftpack
+import pandas as pd
 
 # ----------------------------------------------------------------------
 # Punto 1.a - Trayectoria de un proyectil sin fricción (para encontrar el ángulo óptimo)
@@ -642,3 +646,227 @@ plt.tight_layout()
 plt.savefig("1_numba.png")
 plt.show()
 """
+
+# PUNTO 3
+# Parámetros del problema
+alpha = 0.022  # Coeficiente de dispersión
+L = 2.0  # Longitud del dominio
+N = 256  # Número de puntos espaciales
+dx = L / N  # Espaciado espacial
+dt = 0.0001  # Paso de tiempo
+T_max = 2000  # Tiempo de simulación
+num_frames = 100  # Número de cuadros en la animación
+
+# Malla espacial y condición inicial
+x = np.linspace(0, L, N, endpoint=False)
+psi = np.cos(np.pi * x)
+
+# Diferencias finitas: Matriz de derivadas (según esquema del artículo)
+def deriv1(f):
+    """Derivada primera con diferencias finitas centradas."""
+    return (np.roll(f, -1) - np.roll(f, 1)) / (2 * dx)
+
+def deriv3(f):
+    """Derivada tercera con diferencias finitas."""
+    return (np.roll(f, -2) - 2 * np.roll(f, -1) + 2 * np.roll(f, 1) - np.roll(f, 2)) / (2 * dx**3)
+
+# Almacenar evolución para la animación
+frames = []
+
+# Simulación temporal usando esquema explícito
+t = 0
+while t < T_max:
+    psi_new = psi - dt * (psi * deriv1(psi) + alpha**2 * deriv3(psi))
+    psi = psi_new.copy()  # Actualizar valores
+    t += dt
+
+    # Guardar cada cierto número de pasos para la animación
+    if len(frames) < num_frames and t % (T_max / num_frames) < dt:
+        frames.append(psi.copy())
+
+# Convertir lista de resultados en un array
+frames = np.array(frames)
+
+# Crear animación
+fig, ax = plt.subplots(figsize=(8, 4))
+cax = ax.imshow(frames.T, aspect='auto', origin='lower', extent=[0, T_max, 0, L], cmap='magma')
+ax.set_xlabel("Time [s]")
+ax.set_ylabel("Angle x [m]")
+fig.colorbar(cax, label=r"$\psi(t, x)$")
+
+# Convertir lista de resultados en un DataFrame
+df_frames = pd.DataFrame(frames)
+
+# Guardar los datos en un archivo CSV (opcional)
+df_frames.to_csv("evolucion_kdv.csv", index=False)
+
+# Mostrar los primeros valores para inspección
+print(df_frames.head())
+
+# Visualización con matplotlib
+plt.imshow(df_frames.T, aspect='auto', origin='lower', cmap='magma')
+plt.colorbar(label=r"$\psi(t, x)$")
+plt.xlabel("Time Step")
+plt.ylabel("Spatial Position")
+plt.title("Evolución de la ecuación de KdV")
+plt.show()
+
+
+# PUNTO 4
+# Parámetros del problema
+dx = dy = 0.01  # Paso espacial (m)
+dt = 0.001  # Paso temporal (s)
+T = 2.0  # Tiempo total de simulación (s)
+f = 10  # Frecuencia de la fuente (Hz)
+A = 0.01  # Amplitud de la onda (m)
+c = 0.5  # Velocidad de onda en agua (m/s)
+c_lente = c / 5  # Velocidad dentro del lente
+Nx, Ny = 100, 200  # Tamaño de la malla
+Nt = int(T / dt)  # Número de pasos de tiempo
+
+# Verificación del coeficiente de Courant
+courant = c * dt / dx
+if courant >= 1:
+    raise ValueError("El coeficiente de Courant es mayor o igual a 1, reduce dt o aumenta dx")
+
+# Inicialización de la onda
+gu = np.zeros((Nx, Ny))  # Estado actual
+gu_prev = np.zeros((Nx, Ny))  # Estado anterior
+gu_next = np.zeros((Nx, Ny))  # Estado futuro
+
+# Mapa de velocidades
+c_map = np.full((Nx, Ny), c)  # Velocidad en todo el dominio
+
+# Definir la pared con la apertura
+w_y = int(0.04 / dy)  # Ancho de la pared en celdas
+w_x = int(0.4 / dx)  # Apertura en la pared
+y_mid = Ny // 2
+x_mid = Nx // 2
+c_map[:, y_mid - w_y//2 : y_mid + w_y//2] = 0  # Pared excepto en la apertura
+c_map[x_mid - w_x//2 : x_mid + w_x//2, y_mid - w_y//2 : y_mid + w_y//2] = c  # Apertura con velocidad normal
+
+# Definir el lente (zona de velocidad reducida)
+x_lente = Nx // 4
+y_lente = Ny // 2
+for i in range(Nx):
+    for j in range(Ny):
+        if ((i - x_lente)**2 / (0.1/dx)**2 + 3 * (j - y_lente)**2 / (0.1/dy)**2) <= 1/25:
+            c_map[i, j] = c_lente
+
+# Posición de la fuente
+x_src, y_src = int(0.5 / dx), int(0.5 / dy)
+
+# Configuración de la figura
+fig, ax = plt.subplots()
+ax.set_facecolor("black")  # Fondo negro
+im = ax.imshow(gu, vmin=-A, vmax=A, cmap='RdBu', animated=True)
+
+# Dibujar la pared y la apertura
+y_wall_start = y_mid - w_y//2
+y_wall_end = y_mid + w_y//2
+x_wall = np.arange(Nx)
+ax.plot([y_wall_start, y_wall_start], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_wall_end, y_wall_end], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [0, x_mid - w_x//2], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [x_mid + w_x//2, Nx-1], color="white", linewidth=2)
+
+def update(n):
+    global gu, gu_prev, gu_next
+    
+    # Aplicar la ecuación de onda con diferencias finitas
+    for i in range(1, Nx-1):
+        for j in range(1, Ny-1):
+            if c_map[i, j] != 0:  # No actualizar la pared
+                r = (c_map[i, j] * dt / dx) ** 2
+                gu_next[i, j] = (2 * gu[i, j] - gu_prev[i, j] +
+                                r * (gu[i+1, j] + gu[i-1, j] + gu[i, j+1] + gu[i, j-1] - 4 * gu[i, j]))
+    
+    # Fuente oscilante
+    gu_next[x_src, y_src] = A * np.sin(2 * np.pi * f * n * dt)
+    
+    # Actualizar estados
+    gu_prev, gu, gu_next = gu, gu_next, gu_prev
+    
+    im.set_array(gu)
+    return [im]
+
+ani = animation.FuncAnimation(fig, update, frames=Nt, interval=1000 * T / Nt, blit=True)
+ani.save("4.a.mp4", fps=10)
+plt.show()
+
+###Bono con condiciones iniciales realistas
+# Verificación del coeficiente de Courant
+courant = c * dt / dx
+if courant >= 1:
+    raise ValueError("El coeficiente de Courant es mayor o igual a 1, reduce dt o aumenta dx")
+
+# Inicialización de la onda
+gu = np.zeros((Nx, Ny))  # Estado actual
+gu_prev = np.zeros((Nx, Ny))  # Estado anterior
+gu_next = np.zeros((Nx, Ny))  # Estado futuro
+
+# Mapa de velocidades
+c_map = np.full((Nx, Ny), c)  # Velocidad en todo el dominio
+
+# Definir la pared con la apertura
+w_y = int(0.04 / dy)  # Ancho de la pared en celdas
+w_x = int(0.4 / dx)  # Apertura en la pared
+y_mid = Ny // 2
+x_mid = Nx // 2
+c_map[:, y_mid - w_y//2 : y_mid + w_y//2] = 0  # Pared excepto en la apertura
+c_map[x_mid - w_x//2 : x_mid + w_x//2, y_mid - w_y//2 : y_mid + w_y//2] = c  # Apertura con velocidad normal
+
+# Definir el lente (zona de velocidad reducida)
+x_lente = Nx // 4
+y_lente = Ny // 2
+for i in range(Nx):
+    for j in range(Ny):
+        if ((i - x_lente)**2 / (0.1/dx)**2 + 3 * (j - y_lente)**2 / (0.1/dy)**2) <= 1/25:
+            c_map[i, j] = c_lente
+
+# Posición de la fuente
+x_src, y_src = int(0.5 / dx), int(0.5 / dy)
+
+# Configuración de la figura
+fig, ax = plt.subplots()
+ax.set_facecolor("black")  # Fondo negro
+im = ax.imshow(gu, vmin=-A, vmax=A, cmap='RdBu', animated=True)
+
+# Dibujar la pared y la apertura
+y_wall_start = y_mid - w_y//2
+y_wall_end = y_mid + w_y//2
+x_wall = np.arange(Nx)
+ax.plot([y_wall_start, y_wall_start], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_wall_end, y_wall_end], [0, Nx-1], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [0, x_mid - w_x//2], color="white", linewidth=2)
+ax.plot([y_mid, y_mid], [x_mid + w_x//2, Nx-1], color="white", linewidth=2)
+
+def update(n):
+    global gu, gu_prev, gu_next
+    
+    # Aplicar la ecuación de onda con diferencias finitas
+    for i in range(1, Nx-1):
+        for j in range(1, Ny-1):
+            if c_map[i, j] != 0:  # No actualizar la pared
+                r = (c_map[i, j] * dt / dx) ** 2
+                gu_next[i, j] = (2 * gu[i, j] - gu_prev[i, j] +
+                                r * (gu[i+1, j] + gu[i-1, j] + gu[i, j+1] + gu[i, j-1] - 4 * gu[i, j]))
+    
+    # Aplicar condiciones de frontera realistas (ondas reflejadas)
+    gu_next[0, :] = gu[1, :]
+    gu_next[-1, :] = gu[-2, :]
+    gu_next[:, 0] = gu[:, 1]
+    gu_next[:, -1] = gu[:, -2]
+    
+    # Fuente oscilante
+    gu_next[x_src, y_src] = A * np.sin(2 * np.pi * f * n * dt)
+    
+    # Actualizar estados
+    gu_prev, gu, gu_next = gu, gu_next, gu_prev
+    
+    im.set_array(gu)
+    return [im]
+
+ani = animation.FuncAnimation(fig, update, frames=Nt, interval=1000 * T / Nt, blit=True)
+ani.save("4.a bono.mp4", writer="ffmpeg", fps=10)
+plt.show()
