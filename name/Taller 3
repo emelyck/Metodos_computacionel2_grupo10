@@ -2,6 +2,11 @@ import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
+import matplotlib.animation as animation
+import matplotlib as mpl
+import imageio_ffmpeg
+import scipy.fftpack
+import pandas as pd
 
 #1.a)
 
@@ -226,15 +231,6 @@ ani = animation.FuncAnimation(fig, actualizar, frames=Nt, interval=dt * 1000, bl
 
 # Guardar el video
 ani.save("2.mp4", writer="ffmpeg", fps=30)
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-import matplotlib as mpl
-import imageio_ffmpeg
-import scipy.fftpack
-import pandas as pd
 
 # PUNTO 3
 # Parámetros del problema
