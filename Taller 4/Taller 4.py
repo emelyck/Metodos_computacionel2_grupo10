@@ -369,3 +369,264 @@ plt.savefig(plot_path)
 
 # Provide updated plot file
 plot_path
+
+
+########################
+####### EJERCICIO 5
+########################
+## 5.a Sistema determinista
+# Parámetros dados
+A = 1000  # Producción diaria de U-239
+B = 20  # Extracción diaria de Pu-239
+lambda_U239 = 42.66  # Constante de decaimiento de U-239 (por día)
+lambda_Np239 = 0.294  # Constante de decaimiento de Np-239 (por día)
+
+# Sistema de ecuaciones diferenciales
+def dYdt(t, Y):
+    U, Np, Pu = Y
+    dU_dt = A - lambda_U239 * U
+    dNp_dt = lambda_U239 * U - lambda_Np239 * Np
+    dPu_dt = lambda_Np239 * Np - B * Pu
+    return [dU_dt, dNp_dt, dPu_dt]
+
+# Condiciones iniciales (sistema limpio)
+Y0 = [0, 0, 0]
+
+# Simulación de 30 días
+t_span = (0, 30)
+t_eval = np.linspace(0, 30, 300)  # 300 puntos para mejor resolución
+sol = spi.solve_ivp(dYdt, t_span, Y0, t_eval=t_eval)
+
+# Extraer soluciones
+U_vals, Np_vals, Pu_vals = sol.y
+time_vals = sol.t
+
+# Detectar estabilidad: buscamos cuándo la variación relativa es menor a un umbral
+threshold = 1e-3  # Cambio relativo menor al 0.1%
+stable_index = np.argmax(
+    (np.abs(np.diff(U_vals) / U_vals[:-1]) < threshold) &
+    (np.abs(np.diff(Np_vals) / Np_vals[:-1]) < threshold) &
+    (np.abs(np.diff(Pu_vals) / Pu_vals[:-1]) < threshold)
+)
+stabilization_time = time_vals[stable_index] if stable_index > 0 else None
+
+# Graficar evolución temporal
+plt.figure(figsize=(10, 5))
+plt.plot(time_vals, U_vals, label="U-239")
+plt.plot(time_vals, Np_vals, label="Np-239")
+plt.plot(time_vals, Pu_vals, label="Pu-239")
+plt.axvline(stabilization_time, color='gray', linestyle='dashed', label="Estabilización")
+plt.xlabel("Tiempo (días)")
+plt.ylabel("Cantidad")
+plt.legend()
+plt.title("Evolución Temporal de las Cantidades de U, Np y Pu")
+plt.grid()
+
+# Mostrar resultados en una tabla
+df_results = pd.DataFrame({
+    "Día": time_vals,
+    "U-239": U_vals,
+    "Np-239": Np_vals,
+    "Pu-239": Pu_vals
+})
+print(df_results)
+
+# Mostrar el tiempo de estabilización
+stabilization_time
+
+
+## 5.b Sistema estocástico
+# Parámetros iniciales
+A = 1000  # Producción de U-239 por día
+B = 20  # Extracción de Pu-239 por día
+lambda_U239 = 42.66  # Tasa de decaimiento de U-239 (1/día)
+lambda_Np239 = 0.294  # Tasa de decaimiento de Np-239 (1/día)
+
+# Reacciones (vectores de cambio)
+R = np.array([
+    [1, 0, 0],   # Creación de U-239
+    [-1, 1, 0],  # Decaimiento de U-239 a Np-239
+    [0, -1, 1],  # Decaimiento de Np-239 a Pu-239
+    [0, 0, -1]   # Extracción de Pu-239
+])
+
+# Estado inicial del sistema [U, Np, Pu]
+Y = np.array([0, 0, 0])
+
+# Tiempo de simulación
+t_max = 30  # Simulación de 30 días
+t = 0
+
+# Almacenar resultados
+time_vals = []
+U_vals = []
+Np_vals = []
+Pu_vals = []
+
+# Simulación del proceso estocástico
+while t < t_max:
+    # Calcular tasas de reacción
+    tasas = np.array([
+        A,
+        Y[0] * lambda_U239,
+        Y[1] * lambda_Np239,
+        Y[2] * B
+    ])
+    
+    tasa_total = np.sum(tasas)
+    if tasa_total == 0:
+        break
+    
+    # Tiempo hasta la siguiente reacción (exponencial)
+    tau = np.random.exponential(1 / tasa_total)
+    
+    # Elegir qué reacción ocurre
+    r_index = np.random.choice(len(R), p=tasas / tasa_total)
+    
+    # Aplicar la reacción
+    Y += R[r_index]
+    t += tau
+
+    # Guardar estado
+    time_vals.append(t)
+    U_vals.append(Y[0])
+    Np_vals.append(Y[1])
+    Pu_vals.append(Y[2])
+
+# Graficar evolución temporal
+plt.figure(figsize=(15, 10))
+plt.plot(time_vals, U_vals, label="U-239", alpha=0.7)
+plt.plot(time_vals, Np_vals, label="Np-239", alpha=0.7)
+plt.plot(time_vals, Pu_vals, label="Pu-239", alpha=0.7)
+plt.xlabel("Tiempo (días)")
+plt.ylabel("Cantidad")
+plt.legend()
+plt.title("Evolución Temporal Estocástica del Sistema")
+plt.grid()
+
+# Guardar resultados en un DataFrame
+df_results_stochastic = pd.DataFrame({
+    "Día": time_vals,
+    "U-239": U_vals,
+    "Np-239": Np_vals,
+    "Pu-239": Pu_vals
+})
+print(df_results_stochastic)
+
+## Punto 5.c Simulación
+# Número de simulaciones estocásticas
+num_simulations = 100
+
+# Almacenar todas las simulaciones
+all_simulations = []
+
+# Realizar 100 simulaciones estocásticas
+for _ in range(num_simulations):
+    Y = np.array([0, 0, 0])  # Estado inicial
+    t = 0
+    time_vals = []
+    U_vals = []
+    Np_vals = []
+    Pu_vals = []
+
+    while t < t_max:
+        # Calcular tasas de reacción
+        tasas = np.array([
+            A,
+            Y[0] * lambda_U239,
+            Y[1] * lambda_Np239,
+            Y[2] * B
+        ])
+
+        tasa_total = np.sum(tasas)
+        if tasa_total == 0:
+            break
+
+        # Tiempo hasta la siguiente reacción (exponencial)
+        tau = np.random.exponential(1 / tasa_total)
+
+        # Elegir qué reacción ocurre
+        r_index = np.random.choice(len(R), p=tasas / tasa_total)
+
+        # Aplicar la reacción
+        Y += R[r_index]
+        t += tau
+
+        # Guardar estado
+        time_vals.append(t)
+        U_vals.append(Y[0])
+        Np_vals.append(Y[1])
+        Pu_vals.append(Y[2])
+
+    all_simulations.append((time_vals, U_vals, Np_vals, Pu_vals))
+
+# Graficar
+plt.figure(figsize=(10, 5))
+
+# Graficar las 100 simulaciones estocásticas
+for sim in all_simulations:
+    plt.plot(sim[0], sim[1], color='blue', alpha=0.1)  # U-239
+    plt.plot(sim[0], sim[2], color='orange', alpha=0.1)  # Np-239
+    plt.plot(sim[0], sim[3], color='red', alpha=0.1)  # Pu-239
+
+# Graficar la solución determinista en línea sólida
+plt.plot(sol.t, sol.y[0], color='blue', label="Determinista U-239", linewidth=2)
+plt.plot(sol.t, sol.y[1], color='orange', label="Determinista Np-239", linewidth=2)
+plt.plot(sol.t, sol.y[2], color='red', label="Determinista Pu-239", linewidth=2)
+
+# Configurar gráfico
+plt.xlabel("Tiempo (días)")
+plt.ylabel("Cantidad")
+plt.title("Comparación de Simulación Determinista vs. 100 Simulaciones Estocásticas")
+plt.legend()
+plt.grid()
+
+# Guardar en archivo PDF
+plt.savefig("5.pdf")
+
+## 5.d. Probabilidad de concentración crítica
+# Reducir el número de simulaciones para mejorar el rendimiento
+num_trials = 30
+threshold_pu = 80  # Nivel crítico de Plutonio
+critical_count = 0  # Contador de veces que se supera el umbral
+
+# Realizar simulaciones
+for _ in range(num_trials):
+    Y = np.array([0, 0, 0])  # Estado inicial [U, Np, Pu]
+    t = 0
+
+    while t < t_max:
+        # Calcular tasas de reacción solo si hay cantidad suficiente
+        tasas = np.array([
+            A,
+            Y[0] * lambda_U239,
+            Y[1] * lambda_Np239,
+            Y[2] * B
+        ])
+
+        tasa_total = np.sum(tasas)
+        if tasa_total == 0:
+            break
+
+        # Tiempo hasta la siguiente reacción (exponencial)
+        tau = np.random.exponential(1 / tasa_total)
+
+        # Seleccionar evento sin necesidad de np.random.choice
+        random_val = np.random.rand() * tasa_total
+        cumulative_sum = np.cumsum(tasas)
+        r_index = np.searchsorted(cumulative_sum, random_val)
+
+        # Aplicar la reacción
+        Y += R[r_index]
+        t += tau  # Evolución del tiempo
+
+        # Revisar si alcanzó el nivel crítico de Plutonio
+        if Y[2] >= threshold_pu:
+            critical_count += 1
+            break  # No es necesario seguir si ya alcanzó el umbral
+
+# Calcular probabilidad
+critical_probability = critical_count / num_trials
+
+# Imprimir resultado
+print(f"5) {critical_probability:.4f}")
