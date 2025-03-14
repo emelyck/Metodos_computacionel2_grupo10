@@ -1,7 +1,10 @@
 import numpy as np
 import emcee
 import matplotlib.pyplot as plt
-
+import re
+import unicodedata
+from collections import defaultdict
+import random
 
 ########################
 ####### EJERCICIO 1
@@ -181,3 +184,188 @@ print(
 #plt.legend()
 #plt.savefig("2.pdf")
 #plt.show()
+
+
+########################
+####### EJERCICIO 4
+########################
+## 4.a Limpiado de datos
+# Load the text file
+file_path = "The picture of Dorian Gray.txt"
+
+with open(file_path, "r", encoding="utf-8") as file:
+    text = file.read()
+
+# Remove the Project Gutenberg headers and footers
+start_marker = "*** START OF THE PROJECT GUTENBERG EBOOK THE PICTURE OF DORIAN GRAY ***"
+end_marker = "*** END OF THE PROJECT GUTENBERG EBOOK THE PICTURE OF DORIAN GRAY ***"
+
+start_idx = text.find(start_marker) + len(start_marker)
+end_idx = text.find(end_marker)
+
+if start_idx > len(start_marker) and end_idx > -1:
+    text = text[start_idx:end_idx]
+
+# Normalize text to remove special characters like accents and quotes
+def normalize_text(text):
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[“”‘’'\"_]", "", text)  # Remove various types of quotes and underscores
+    text = re.sub(r"\s+", " ", text)  # Replace multiple spaces with a single space
+    text = text.lower()  # Convert text to lowercase
+    return text
+
+# Apply text normalization
+cleaned_text = normalize_text(text)
+
+# Replace artificial line breaks
+cleaned_text = cleaned_text.replace("\r\n", "\n").replace("\n\n", "#").replace("\n", "").replace("#", "\n\n")
+
+# Save the cleaned text to a new file
+cleaned_file_path = "The_picture_of_Dorian_Gray_cleaned.txt"
+with open(cleaned_file_path, "w", encoding="utf-8") as file:
+    file.write(cleaned_text)
+
+# Provide the cleaned file
+cleaned_file_path
+
+## 4.b Entrenamiento y predicción
+# Define n-gram size
+n = 3  # You can adjust this value
+
+# Create a dictionary to store frequency counts
+ngram_freq = defaultdict(lambda: defaultdict(int))
+
+# Iterate through the text to populate frequency table
+for i in range(len(cleaned_text) - n):
+    ngram = cleaned_text[i:i+n]  # Get the n-gram
+    next_char = cleaned_text[i+n]  # Get the next character
+    ngram_freq[ngram][next_char] += 1
+
+# Convert frequency table to probabilities
+ngram_prob = {}
+for ngram, next_chars in ngram_freq.items():
+    total = sum(next_chars.values())
+    ngram_prob[ngram] = {char: count/total for char, count in next_chars.items()}
+
+# Function to generate text using trained model
+def generate_text(ngram_prob, length=1500):
+    import random
+
+    # Find a suitable starting n-gram (one that starts with "\n")
+    start_ngrams = [ngram for ngram in ngram_prob.keys() if ngram.startswith("\n")]
+    if not start_ngrams:
+        start_ngrams = list(ngram_prob.keys())  # Fallback if no suitable n-gram
+    current_ngram = random.choice(start_ngrams)
+
+    # Generate text
+    generated_text = current_ngram
+    for _ in range(length - len(current_ngram)):
+        if current_ngram in ngram_prob:
+            next_chars = list(ngram_prob[current_ngram].keys())
+            probabilities = list(ngram_prob[current_ngram].values())
+            next_char = random.choices(next_chars, probabilities)[0]
+        else:
+            break  # Stop if no known continuation
+
+        generated_text += next_char
+        current_ngram = generated_text[-n:]  # Update n-gram
+
+    return generated_text
+
+# Generate a sample text
+generated_text_sample = generate_text(ngram_prob, length=1500)
+
+# Save generated text to a file
+generated_file_path = "generated_text.txt"
+with open(generated_file_path, "w", encoding="utf-8") as file:
+    file.write(generated_text_sample)
+
+# Provide the file for download
+generated_file_path
+
+## 4.c Análisis
+# Define range of n-gram values to test
+n_values = range(1, 8)
+generated_files = {}
+
+# Function to train and generate text for a given n
+def train_and_generate(n, text_length=1500):
+    ngram_freq = defaultdict(lambda: defaultdict(int))
+
+    # Build frequency table
+    for i in range(len(cleaned_text) - n):
+        ngram = cleaned_text[i:i+n]
+        next_char = cleaned_text[i+n]
+        ngram_freq[ngram][next_char] += 1
+
+    # Normalize frequencies
+    ngram_prob = {ngram: {char: count / sum(chars.values()) for char, count in chars.items()} for ngram, chars in ngram_freq.items()}
+
+    # Generate text
+    start_ngrams = [ngram for ngram in ngram_prob.keys() if ngram.startswith("\n")]
+    if not start_ngrams:
+        start_ngrams = list(ngram_prob.keys())
+    current_ngram = random.choice(start_ngrams)
+
+    generated_text = current_ngram
+    for _ in range(text_length - len(current_ngram)):
+        if current_ngram in ngram_prob:
+            next_chars = list(ngram_prob[current_ngram].keys())
+            probabilities = list(ngram_prob[current_ngram].values())
+            next_char = random.choices(next_chars, probabilities)[0]
+        else:
+            break
+
+        generated_text += next_char
+        current_ngram = generated_text[-n:]
+
+    return generated_text
+
+# Generate texts for different n values
+for n in n_values:
+    generated_text = train_and_generate(n)
+    file_path = f"gen_text_n{n}.txt"
+    with open(file_path, "w", encoding="utf-8") as file:
+        file.write(generated_text)
+    generated_files[n] = file_path
+
+# Function to compute word match percentage
+def compute_word_match_percentage(text):
+    words = re.findall(r"\b[a-zA-Z']+\b", text)
+    valid_words = sum(1 for word in words if word in english_words)
+    return (valid_words / len(words)) * 100 if words else 0
+
+# Compute percentages for each generated text
+match_percentages = {}
+for n, file_path in generated_files.items():
+    with open(file_path, "r", encoding="utf-8") as file:
+        text = file.read()
+    match_percentages[n] = compute_word_match_percentage(text)
+
+
+# Load the list of 10,000 English words
+word_list_path = "List of 10000 words.txt"
+
+with open(word_list_path, "r", encoding="utf-8") as file:
+    english_words = set(word.strip().lower() for word in file.readlines())
+
+# Run the analysis with the word list
+match_percentages = {}
+for n, file_path in generated_files.items():
+    with open(file_path, "r", encoding="utf-8") as file:
+        text = file.read()
+    match_percentages[n] = compute_word_match_percentage(text)
+
+# Re-generate and save the updated plot
+plt.figure(figsize=(8, 5))
+plt.plot(list(match_percentages.keys()), list(match_percentages.values()), marker="o", linestyle="-")
+plt.xlabel("n-gram size (n)")
+plt.ylabel("Percentage of valid English words")
+plt.title("Effect of n-gram size on text coherence")
+plt.grid(True)
+
+plot_path = "4.pdf"
+plt.savefig(plot_path)
+
+# Provide updated plot file
+plot_path
