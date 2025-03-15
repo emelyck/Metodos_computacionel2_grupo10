@@ -185,6 +185,55 @@ print(
 #plt.savefig("2.pdf")
 #plt.show()
 
+########################
+####### EJERCICIO 3
+########################
+##
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter
+
+# Configuración inicial
+N = 150
+J = 0.2
+beta = 10
+frames = 500
+iterations_per_frame = 400
+
+# Inicializar la red de espines aleatoriamente
+lattice = np.random.choice([-1, 1], size=(N, N))
+
+# Función para calcular la energía
+def calculate_energy(lattice, i, j):
+    neighbors = [
+        lattice[(i - 1) % N, j],  # Vecino arriba
+        lattice[(i + 1) % N, j],  # Vecino abajo
+        lattice[i, (j - 1) % N],  # Vecino izquierda
+        lattice[i, (j + 1) % N]   # Vecino derecha
+    ]
+    return -J * lattice[i, j] * sum(neighbors)
+
+# Algoritmo de Metropolis-Hastings
+def metropolis_step(lattice):
+    i, j = np.random.randint(0, N, size=2)
+    delta_energy = -2 * calculate_energy(lattice, i, j)
+    if delta_energy <= 0 or np.random.rand() <= np.exp(-beta * delta_energy):
+        lattice[i, j] *= -1  # Cambiar el espín
+
+# Crear la animación
+fig, ax = plt.subplots()
+cax = ax.imshow(lattice, cmap='gray')
+
+writer = FFMpegWriter(fps=30, metadata=dict(artist='Me'), bitrate=1800)
+with writer.saving(fig, "3.mp4", dpi=100):
+    for frame in range(frames):
+        for _ in range(iterations_per_frame):
+            metropolis_step(lattice)
+        cax.set_data(lattice)
+        writer.grab_frame()
+
+plt.close(fig)
+
 
 ########################
 ####### EJERCICIO 4
